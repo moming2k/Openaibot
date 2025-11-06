@@ -406,10 +406,11 @@ class Location(BaseModel):
     chat_id: str = Field(None, description="guild id(channel in dm)/Telegram chat id")
     thread_id: Optional[str] = Field(None, description="channel id/Telegram thread")
     message_id: Optional[str] = Field(None, description="message id")
+    bot_message_id: Optional[str] = Field(None, description="bot's response message id for editing")
 
     @model_validator(mode="after")
     def to_string(self):
-        for key in ["user_id", "chat_id", "thread_id", "message_id"]:
+        for key in ["user_id", "chat_id", "thread_id", "message_id", "bot_message_id"]:
             if isinstance(getattr(self, key), int):
                 setattr(self, key, str(getattr(self, key)))
         return self
