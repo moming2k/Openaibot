@@ -12,6 +12,9 @@ services:
       # Override any environment variables here
       - TZ=UTC
       - DEBUG=${DEBUG:-false}
+    ports:
+      # Newsletter API port (if API is running in this container)
+      - "${NEWSLETTER_API_PORT:-8765}:8765"
     volumes:
       # Configuration directory for persistent storage
       - ./config_dir:/app/config_dir
