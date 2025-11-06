@@ -78,6 +78,10 @@ bot = [
     "khl-py<1.0.0,>=0.3.17",
     "slack-bolt<2.0.0,>=1.18.0"
 ]
+api = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+]
 testing = [
     "hikari==2.0.0.dev121",
     # FIXME code not compatible with hikari 2.0.0.dev121

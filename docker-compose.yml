@@ -46,6 +46,51 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # Newsletter API Server (Optional - for submitting long-form content via HTTP)
+  newsletter_api:
+    image: sudoskys/llmbot:latest
+    container_name: llmbot_newsletter_api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - TZ=UTC
+      - DEBUG=${DEBUG:-false}
+    command: ["python", "start_api.py"]
+    ports:
+      - "${NEWSLETTER_API_PORT:-8765}:8765"
+    volumes:
+      - ./config_dir:/app/config_dir
+      - ./logs:/app/logs
+    networks:
+      - bot_network2
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8765/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    profiles:
+      - api  # Use 'docker-compose --profile api up' to enable this service
+
   # RabbitMQ Message Queue (Required)
   rabbitmq:
     image: rabbitmq:3.12-management-alpine
