@@ -9,7 +9,8 @@ RUN apt update && \
 
 COPY pyproject.toml pdm.lock README.md /project/
 WORKDIR /project
-RUN pdm sync -G bot --prod --no-editable
+# Install bot dependencies (including Discord) and API dependencies (for Newsletter API)
+RUN pdm sync -G bot -G api --prod --no-editable
 
 # 第二个阶段
 FROM python:3.9-slim-buster as runtime

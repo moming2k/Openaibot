@@ -75,6 +75,7 @@ bot = [
     "hikari>=2.0.0.dev121",
     # FIXME code not compatible with hikari 2.0.0.dev121
     "hikari-crescent>=0.6.5",
+    "crescent>=0.0.17",  # Added for Discord bot support
     "khl-py<1.0.0,>=0.3.17",
     "slack-bolt<2.0.0,>=1.18.0"
 ]
