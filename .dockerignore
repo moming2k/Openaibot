@@ -3,6 +3,9 @@ test
 run.log
 docs
 .git
+.venv
+__pycache__
+*.pyc
 /data/
 /dist/
 /mongodb/

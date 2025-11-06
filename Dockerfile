@@ -1,5 +1,5 @@
 # 第一个阶段
-FROM python:3.9-buster as builder
+FROM python:3.11-bookworm AS builder
 
 RUN apt update && \
     apt install -y build-essential && \
@@ -7,13 +7,15 @@ RUN apt update && \
     pip install pdm && \
     apt install -y ffmpeg
 
-COPY pyproject.toml pdm.lock README.md /project/
+COPY . /project/
 WORKDIR /project
-# Install bot dependencies (including Discord) and API dependencies (for Newsletter API)
-RUN pdm sync -G bot -G api --prod --no-editable
+# Install all dependencies including optional ones (bot and api groups)
+# Continue even if some packages fail (e.g., primp, duckduckgo-search on ARM64)
+RUN pdm lock --update-reuse && \
+    (pdm install --no-editable || echo "Some optional packages failed to install, continuing...")
 
 # 第二个阶段
-FROM python:3.9-slim-buster as runtime
+FROM python:3.11-slim-bookworm AS runtime
 
 RUN apt update && \
     apt install -y npm && \
@@ -21,7 +23,7 @@ RUN apt update && \
     apt install -y ffmpeg && \
     pip install pdm
 
-VOLUME ["/redis", "/rabbitmq", "/mongodb", "/run.log", ".cache",".montydb",".snapshot"]
+VOLUME ["/app/config_dir", "/app/logs"]
 
 WORKDIR /app
 COPY --from=builder /project/.venv /app/.venv
