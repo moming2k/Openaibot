@@ -162,10 +162,8 @@ async def submit_newsletter_content(
         )
 
         # Send task to processing queue
-        success, logs = await Task.send_task(
-            queue_name="discord_hikari",
-            task=task
-        )
+        _task = Task()
+        success, logs = await _task.send_task(task=task)
 
         if success:
             logger.info(f"✅ API: Newsletter task submitted successfully")
