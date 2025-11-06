@@ -5,6 +5,7 @@
 # @Software: PyCharm
 import base64
 import binascii
+import os
 import random
 from typing import List
 
@@ -14,7 +15,7 @@ from hikari import Intents
 from hikari.impl import ProxySettings
 from loguru import logger
 from telebot import formatting
-from telegramify_markdown import markdownify
+from telegramify_markdown import convert as markdownify
 
 from app.setting.discord import BotSetting
 from llmkira.kv_manager.env import EnvManager
@@ -220,9 +221,7 @@ class DiscordBotRunner(Runner):
                     task=TaskHeader.from_sender(
                         event_message,
                         task_sign=sign,
-                        chat_id=str(
-                            message.guild_id if message.guild_id else message.channel_id
-                        ),
+                        chat_id=str(message.channel_id),
                         user_id=str(message.author.id),
                         message_id=str(message.id),
                         platform=__sender__,
@@ -430,13 +429,71 @@ class DiscordBotRunner(Runner):
         async def on_guild_create(event_: hikari.GuildMessageCreateEvent):
             if event_.message.author.is_bot:
                 return
+
+            # Newsletter channel handler (check before empty message validation)
+            newsletter_channel_id = os.getenv("PLUGIN_NEWS_CHANNEL_ID")
+            if newsletter_channel_id and str(event_.message.channel_id) == newsletter_channel_id:
+                # Auto-process newsletter channel messages
+                logger.info(f"📰 Newsletter channel message detected: {event_.message.channel_id}")
+
+                # Check for file attachments
+                content_to_analyze = event_.content if event_.content else ""
+                if event_.message.attachments:
+                    logger.info(f"📎 Found {len(event_.message.attachments)} attachment(s)")
+                    for attachment in event_.message.attachments:
+                        # Only process text-based files
+                        text_extensions = ('.txt', '.md', '.csv', '.json', '.log', '.xml', '.html', '.py', '.js', '.ts', '.java', '.c', '.cpp', '.h', '.css', '.yaml', '.yml', '.ini', '.conf', '.sh')
+                        if attachment.filename.lower().endswith(text_extensions):
+                            try:
+                                # Download and read file content
+                                file_data = await attachment.read()
+                                file_content = file_data.decode('utf-8', errors='ignore')
+                                logger.info(f"📄 Read file: {attachment.filename} ({len(file_content)} chars)")
+
+                                # Use file content as the main content
+                                content_to_analyze = f"[File: {attachment.filename}]\n\n{file_content}"
+                                break  # Use first text file found
+                            except Exception as e:
+                                logger.error(f"Failed to read file {attachment.filename}: {e}")
+                        else:
+                            logger.info(f"⏭️ Skipping non-text file: {attachment.filename}")
+
+                # Skip if no content to analyze
+                if not content_to_analyze or not content_to_analyze.strip():
+                    logger.warning("📰 Newsletter channel: No content to analyze (empty message and no text files)")
+                    return
+
+                # Prepend instruction to message content
+                newsletter_instruction = (
+                    "[SYSTEM INSTRUCTION: You are a newsletter content analyzer. "
+                    "Provide: 1) 📋 摘要 (Summary) with 3-5 key bullet points, "
+                    "2) ✅ 行動項目 (Action Items) with specific actionable steps. "
+                    "If content is English, translate your response to Traditional Chinese (繁體中文). "
+                    "If no actionable items, state '無明確行動項目'.]\n\n"
+                    f"Content to analyze:\n{content_to_analyze}"
+                )
+
+                # Temporarily modify message content
+                original_content = event_.message.content
+                event_.message.content = newsletter_instruction
+
+                result = await create_task(
+                    event_.message,
+                    disable_tool_action=True,  # Disable function calling for summaries
+                )
+
+                # Restore original content
+                event_.message.content = original_content
+                return result
+
+            # Check for empty message (after newsletter handler)
             if not event_.content:
                 logger.info(
                     "discord_hikari:ignore a empty message,do you turn on the MESSAGE_CONTENT setting?"
                 )
                 return
 
-            # 扳机
+            # 扳機
             trigger = await get_trigger_loop(
                 platform_name=__sender__,
                 message=event_.content,
@@ -509,4 +566,5 @@ class DiscordBotRunner(Runner):
             )
 
         logger.success("Sender Runtime:DiscordBot start")
-        bot.run()
+        await bot.start()
+        await bot.join()

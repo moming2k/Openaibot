@@ -42,6 +42,11 @@ class DiscordSender(BaseSender):
             token=BotSetting.token, token_type=hikari.TokenType.BOT
         )
 
+    @staticmethod
+    def _get_channel_id(receiver: Location) -> int:
+        """Helper method to get channel ID, using chat_id if thread_id is None"""
+        return int(receiver.thread_id) if receiver.thread_id else int(receiver.chat_id)
+
     async def file_forward(self, receiver: Location, file_list: List[File]):
         for file_obj in file_list:
             # DATA
@@ -50,17 +55,18 @@ class DiscordSender(BaseSender):
                 logger.error(f"file not found {receiver.user_id}")
                 continue
             file_warp = hikari.files.Bytes(file_data, file_obj.file_name, mimetype=None)
+            channel_id = self._get_channel_id(receiver)
             if file_obj.file_name.endswith((".jpg", ".png")):
                 async with self.bot as client:
                     client: hikari.impl.RESTClientImpl
                     _reply = None
-                    if receiver.thread_id != receiver.chat_id:
+                    if receiver.thread_id and receiver.thread_id != receiver.chat_id:
                         _reply = await client.fetch_message(
-                            channel=int(receiver.thread_id),
+                            channel=channel_id,
                             message=int(receiver.message_id),
                         )
                     await client.create_message(
-                        channel=int(receiver.thread_id),
+                        channel=channel_id,
                         embed=hikari.EmbedImage(
                             resource=file_warp,
                         ),
@@ -70,13 +76,13 @@ class DiscordSender(BaseSender):
                 async with self.bot as client:
                     client: hikari.impl.RESTClientImpl
                     _reply = None
-                    if receiver.thread_id != receiver.chat_id:
+                    if receiver.thread_id and receiver.thread_id != receiver.chat_id:
                         _reply = await client.fetch_message(
-                            channel=int(receiver.thread_id),
+                            channel=channel_id,
                             message=int(receiver.message_id),
                         )
                     await client.create_message(
-                        channel=int(receiver.thread_id),
+                        channel=channel_id,
                         attachment=file_warp,
                         reply=_reply,
                     )
@@ -85,20 +91,21 @@ class DiscordSender(BaseSender):
         """
         插件专用转发，是Task通用类型
         """
+        channel_id = self._get_channel_id(receiver)
         for item in message:
             await self.file_forward(receiver=receiver, file_list=item.files)
             async with self.bot as client:
                 client: hikari.impl.RESTClientImpl
                 _reply = None
-                if receiver.thread_id != receiver.chat_id:
+                if receiver.thread_id and receiver.thread_id != receiver.chat_id:
                     _reply = await client.fetch_message(
-                        channel=int(receiver.thread_id),
+                        channel=channel_id,
                         message=int(receiver.message_id)
                         if receiver.message_id
                         else None,
                     )
                 await client.create_message(
-                    channel=int(receiver.thread_id) if receiver.thread_id else None,
+                    channel=channel_id,
                     content=item.text,
                     reply=_reply,
                 )
@@ -118,6 +125,7 @@ class DiscordSender(BaseSender):
             platform_name=__receiver__, messages=event_message, locate=receiver
         )
         event_message: list
+        channel_id = self._get_channel_id(receiver)
         for event in event_message:
             await self.file_forward(receiver=receiver, file_list=event.files)
             if not event.text:
@@ -125,15 +133,15 @@ class DiscordSender(BaseSender):
             async with self.bot as client:
                 client: hikari.impl.RESTClientImpl
                 _reply = None
-                if receiver.thread_id != receiver.chat_id:
+                if receiver.thread_id and receiver.thread_id != receiver.chat_id:
                     _reply = await client.fetch_message(
-                        channel=int(receiver.thread_id),
+                        channel=channel_id,
                         message=int(receiver.message_id)
                         if receiver.message_id
                         else None,
                     )
                 await client.create_message(
-                    channel=int(receiver.thread_id),
+                    channel=channel_id,
                     content=event.text,
                     reply=_reply,
                 )
@@ -143,13 +151,14 @@ class DiscordSender(BaseSender):
         async with self.bot as client:
             client: hikari.impl.RESTClientImpl
             _reply = None
-            if receiver.thread_id != receiver.chat_id:
+            channel_id = int(receiver.thread_id) if receiver.thread_id else int(receiver.chat_id)
+            if receiver.thread_id and receiver.thread_id != receiver.chat_id:
                 _reply = await client.fetch_message(
-                    channel=int(receiver.thread_id),
+                    channel=channel_id,
                     message=int(receiver.message_id) if receiver.message_id else None,
                 )
             await client.create_message(
-                channel=int(receiver.thread_id), content=text, reply=_reply
+                channel=channel_id, content=text, reply=_reply
             )
 
     async def function(

@@ -105,6 +105,8 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+.env.backup.*
 .venv
 env/
 venv/
@@ -150,3 +152,14 @@ config_dir/*.secret/
 /.snapshot/
 /.tutorial.db
 app/.tutorial.db
+
+# Secrets and sensitive data
+secrets/
+*.secret
+
+# Docker compose backups
+docker-compose.yml.backup.*
+docker-compose*.backup.*
+
+# Config directory
+config_dir/
