@@ -162,7 +162,7 @@ async def submit_newsletter_content(
         )
 
         # Send task to processing queue
-        _task = Task()
+        _task = Task(queue="discord_hikari")
         success, logs = await _task.send_task(task=task)
 
         if success:
@@ -170,7 +170,7 @@ async def submit_newsletter_content(
             return NewsletterResponse(
                 success=True,
                 message="Content submitted for processing. Response will be sent to Discord channel.",
-                task_id=task.task_sign.task_id
+                task_id=task.task_sign.task_uuid
             )
         else:
             logger.error(f"❌ API: Failed to submit task: {logs}")
