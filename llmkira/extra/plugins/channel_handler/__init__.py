@@ -42,6 +42,7 @@ class ChannelType(str, Enum):
     GENERAL = "general"
     SUPPORT = "support"
     ANNOUNCEMENT = "announcement"
+    DEEP_RESEARCH = "deep_research"
     CUSTOM = "custom"
 
 
@@ -242,6 +243,32 @@ class ChannelManager:
                     )
                 )
 
+        # Deep Research Channel
+        if research_id := os.getenv("PLUGIN_DEEP_RESEARCH_CHANNEL_ID"):
+            if research_id not in self.configs:
+                self.configs[research_id] = ChannelConfig(
+                    channel_id=research_id,
+                    channel_type=ChannelType.DEEP_RESEARCH,
+                    channel_name="Deep Research",
+                    behavior=ChannelBehavior(
+                        response_style="technical",
+                        prefix="🔬",
+                        functions_enabled=True,
+                        web_search_enabled=True,
+                        code_interpreter_enabled=False,
+                        auto_respond=True,
+                        require_mention=False,
+                        max_tokens=2000,
+                        temperature=0.7,
+                        system_prompt=(
+                            "You are a research assistant specializing in comprehensive, in-depth analysis. "
+                            "Provide structured research with: Executive Summary, Key Findings, Detailed Analysis, "
+                            "Insights & Implications, Related Topics, and Conclusions. "
+                            "Be thorough, well-researched, and include specific details and examples."
+                        )
+                    )
+                )
+
         # Save if new defaults were added
         self._save_configs()
 
@@ -346,6 +373,12 @@ async def channel_trigger(
     elif config.channel_type == ChannelType.SUPPORT:
         # Support channels: always respond
         return True
+    elif config.channel_type == ChannelType.DEEP_RESEARCH:
+        # Deep research channels: respond to research requests
+        return any(
+            term in message_lower
+            for term in ["research", "analyze", "study", "investigate", "explore", "?"]
+        )
 
     return False
 
