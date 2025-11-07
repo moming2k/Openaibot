@@ -244,6 +244,18 @@ class BaseReceiver(object):
         :return:
         """
         try:
+            # Send quick response for Discord platform
+            if task.receiver.platform == "discord_hikari" and hasattr(self.sender, 'quick_reply'):
+                try:
+                    bot_msg_id = await self.sender.quick_reply(
+                        receiver=task.receiver,
+                        text="⏳ Processing your request..."
+                    )
+                    task.receiver.bot_message_id = bot_msg_id
+                    logger.debug(f"Quick reply sent --bot_message_id {bot_msg_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to send quick reply --error {e}")
+
             try:
                 credentials = await read_user_credential(user_id=task.receiver.uid)
                 if global_credential and not credentials:

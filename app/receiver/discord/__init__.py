@@ -126,10 +126,28 @@ class DiscordSender(BaseSender):
         )
         event_message: list
         channel_id = self._get_channel_id(receiver)
+        first_text_message = True
         for event in event_message:
             await self.file_forward(receiver=receiver, file_list=event.files)
             if not event.text:
                 continue
+
+            # If bot_message_id exists, update the first text message instead of creating new
+            if receiver.bot_message_id and first_text_message:
+                try:
+                    await self.update_reply(
+                        receiver=receiver,
+                        message_id=receiver.bot_message_id,
+                        text=event.text
+                    )
+                    first_text_message = False
+                    logger.debug(f"Updated quick reply --bot_message_id {receiver.bot_message_id}")
+                    continue
+                except Exception as e:
+                    logger.warning(f"Failed to update message --error {e}, falling back to create")
+                    receiver.bot_message_id = None
+
+            first_text_message = False
             async with self.bot as client:
                 client: hikari.impl.RESTClientImpl
                 _reply = None
@@ -148,6 +166,20 @@ class DiscordSender(BaseSender):
         return logger.trace("reply message")
 
     async def error(self, receiver: Location, text):
+        # If bot_message_id exists, update the quick response with error
+        if receiver.bot_message_id:
+            try:
+                await self.update_reply(
+                    receiver=receiver,
+                    message_id=receiver.bot_message_id,
+                    text=f"❌ {text}"
+                )
+                logger.debug(f"Updated quick reply with error --bot_message_id {receiver.bot_message_id}")
+                return
+            except Exception as e:
+                logger.warning(f"Failed to update error message --error {e}, falling back to create")
+                receiver.bot_message_id = None
+
         async with self.bot as client:
             client: hikari.impl.RESTClientImpl
             _reply = None
@@ -159,6 +191,39 @@ class DiscordSender(BaseSender):
                 )
             await client.create_message(
                 channel=channel_id, content=text, reply=_reply
+            )
+
+    async def quick_reply(self, receiver: Location, text: str = "⏳ Processing..."):
+        """
+        Send initial quick response and return message ID for later editing
+        """
+        channel_id = self._get_channel_id(receiver)
+        async with self.bot as client:
+            client: hikari.impl.RESTClientImpl
+            _reply = None
+            if receiver.thread_id and receiver.thread_id != receiver.chat_id:
+                _reply = await client.fetch_message(
+                    channel=channel_id,
+                    message=int(receiver.message_id) if receiver.message_id else None,
+                )
+            msg = await client.create_message(
+                channel=channel_id,
+                content=text,
+                reply=_reply,
+            )
+            return str(msg.id)
+
+    async def update_reply(self, receiver: Location, message_id: str, text: str):
+        """
+        Edit existing message with new content
+        """
+        channel_id = self._get_channel_id(receiver)
+        async with self.bot as client:
+            client: hikari.impl.RESTClientImpl
+            await client.edit_message(
+                channel=channel_id,
+                message=int(message_id),
+                content=text,
             )
 
     async def function(
