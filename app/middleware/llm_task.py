@@ -145,22 +145,34 @@ class OpenaiMiddleware(object):
         从任务会话和历史消息中构建消息
         :return: None
         """
-        system_prompt = await InstructionManager(
-            user_id=self.session_uid
-        ).read_instruction()
-        message_run = []
-        if isinstance(system_prompt, str):
-            message_run.append(SystemMessage(content=system_prompt))
-        history = await self.message_history.read(lines=8)
-        logger.trace(f"History message {history}")
-        for de_active_message in history:
-            try:
-                msg = active_cell_string(de_active_message)
-            except Exception as ex:
-                logger.error(f"llm_task:build_message error {ex}")
-                continue
-            else:
-                message_run.append(msg)
+        # Only read user instruction if task doesn't already have one (e.g., from hooks)
+        if not self.task.task_sign.instruction:
+            system_prompt = await InstructionManager(
+                user_id=self.session_uid
+            ).read_instruction()
+            message_run = []
+            if isinstance(system_prompt, str):
+                message_run.append(SystemMessage(content=system_prompt))
+        else:
+            message_run = []
+
+        # Only read conversation history if memory is enabled
+        # When memory_able is False (e.g., newsletter/deep research channels),
+        # skip loading old conversations to avoid context pollution
+        if self.task.task_sign.memory_able:
+            history = await self.message_history.read(lines=8)
+            logger.trace(f"History message {history}")
+            for de_active_message in history:
+                try:
+                    msg = active_cell_string(de_active_message)
+                except Exception as ex:
+                    logger.error(f"llm_task:build_message error {ex}")
+                    continue
+                else:
+                    message_run.append(msg)
+        else:
+            logger.debug("llm_task:Skipping history load because memory_able is False")
+
         return message_run
 
     async def build_task_messages(self, remember=True):
@@ -187,12 +199,14 @@ class OpenaiMiddleware(object):
         remember: bool,
         credential: Credential,
         disable_tool: bool = False,
+        max_tokens: int = None,
     ) -> OpenAIResult:
         """
         处理消息转换和调用工具
         :param remember: 是否自动写回
         :param disable_tool: 禁用函数
         :param credential: 凭证
+        :param max_tokens: 最大令牌数 (可选，从hook传入)
         :return: OpenaiResult 返回结果
         :raise RuntimeError: 消息为空
         :raise AssertionError: 无法处理消息
@@ -230,6 +244,7 @@ class OpenaiMiddleware(object):
             f"\n--message {len(messages)} "
             f"\n--tools {tools} "
             f"\n--model {credential.api_model}"
+            f"\n--max_tokens {max_tokens if max_tokens else 'default'}"
         )
         for msg in messages:
             if isinstance(msg, UserMessage):
@@ -247,7 +262,7 @@ class OpenaiMiddleware(object):
         assert messages, RuntimeError("llm_task:message cant be none...")
         messages = await validate_mock(messages)
         endpoint: OpenAI = OpenAI(
-            messages=messages, tools=tools, model=credential.api_model
+            messages=messages, tools=tools, model=credential.api_model, max_tokens=max_tokens
         )
         # 调用Openai
         try:

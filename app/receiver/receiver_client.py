@@ -244,27 +244,75 @@ class BaseReceiver(object):
         :return:
         """
         try:
-            # Send quick response for Discord platform
-            if task.receiver.platform == "discord_hikari" and hasattr(self.sender, 'quick_reply'):
-                try:
-                    bot_msg_id = await self.sender.quick_reply(
-                        receiver=task.receiver,
-                        text="⏳ Processing your request..."
-                    )
-                    task.receiver.bot_message_id = bot_msg_id
-                    logger.debug(f"Quick reply sent --bot_message_id {bot_msg_id}")
-                except Exception as e:
-                    logger.warning(f"Failed to send quick reply --error {e}")
-
             try:
+                # Call RECEIVER hooks to allow modifications before LLM request
+                _, hook_kwargs = await run_hook(
+                    Trigger.RECEIVER,
+                    platform=task.receiver.platform,
+                    messages=task.message,
+                    locate=task.receiver,
+                )
+
                 credentials = await read_user_credential(user_id=task.receiver.uid)
                 if global_credential and not credentials:
                     credentials = global_credential
                 assert credentials, "You need to /login first"
+
+                # Override model if specified by hooks (e.g., channel_handler or deep_research)
+                if hook_kwargs.get("model"):
+                    from app.components.credential import Credential
+                    credentials = Credential(
+                        api_key=credentials.api_key,
+                        api_endpoint=credentials.api_endpoint,
+                        api_model=hook_kwargs["model"],
+                        api_tool_model=credentials.api_tool_model,
+                    )
+                    logger.info(f"🎯 Model override applied: {hook_kwargs['model']} for channel {task.receiver.chat_id}")
+
+                # Get max_tokens from hooks if specified
+                max_tokens = hook_kwargs.get("max_tokens")
+                if max_tokens:
+                    logger.info(f"🎯 Max tokens override applied: {max_tokens} for channel {task.receiver.chat_id}")
+
+                # Get system_prompt from hooks if specified
+                system_prompt = hook_kwargs.get("system_prompt")
+                if system_prompt:
+                    task.task_sign.instruction = system_prompt
+                    logger.info(f"🎯 System prompt override applied for channel {task.receiver.chat_id}")
+
+                # Get memory_able from hooks if specified
+                memory_able_setting = hook_kwargs.get("memory_able")
+                if memory_able_setting is not None:
+                    task.task_sign.memory_able = memory_able_setting
+                    logger.info(f"🎯 Memory setting override applied: {memory_able_setting} for channel {task.receiver.chat_id}")
+
+                # Send quick response for Discord platform with model and context info
+                if task.receiver.platform == "discord_hikari" and hasattr(self.sender, 'quick_reply'):
+                    try:
+                        # Calculate rough context length from messages
+                        context_chars = sum(len(msg.text) if hasattr(msg, 'text') and msg.text else 0 for msg in task.message)
+                        context_display = f"{context_chars / 1000:.1f}K" if context_chars >= 1000 else f"{context_chars}"
+
+                        # Format max tokens display
+                        max_tokens_display = f"{max_tokens / 1000:.0f}K" if max_tokens and max_tokens >= 1000 else str(max_tokens) if max_tokens else "default"
+
+                        # Create status message
+                        status_text = f"⏳ Model: **{credentials.api_model}** | Context: ~{context_display} chars | Max: {max_tokens_display} tokens"
+
+                        bot_msg_id = await self.sender.quick_reply(
+                            receiver=task.receiver,
+                            text=status_text
+                        )
+                        task.receiver.bot_message_id = bot_msg_id
+                        logger.debug(f"Quick reply sent --bot_message_id {bot_msg_id} --model {credentials.api_model}")
+                    except Exception as e:
+                        logger.warning(f"Failed to send quick reply --error {e}")
+
                 llm_result = await llm.request_openai(
                     remember=remember,
                     disable_tool=disable_tool,
                     credential=credentials,
+                    max_tokens=max_tokens,
                 )
                 assistant_message = llm_result.default_message
                 logger.debug(f"Assistant:{assistant_message}")

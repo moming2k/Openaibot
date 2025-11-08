@@ -1,0 +1,46 @@
+version: '3.8'
+
+# Development Docker Compose Override
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# This configuration mounts source code as volumes so code changes
+# are immediately reflected in the running container.
+
+services:
+  llmbot:
+    # Override volumes to mount source code for development
+    volumes:
+      # Configuration directory for persistent storage
+      - ./config_dir:/app/config_dir
+      # Logs directory
+      - ./logs:/app/logs
+      # Custom plugins directory
+      - ./custom_plugins:/app/llmkira/extra/plugins/custom:ro
+
+      # ===== DEVELOPMENT: Mount source code =====
+      # Main application code
+      - ./app:/app/app
+      - ./llmkira:/app/llmkira
+      - ./start_sender.py:/app/start_sender.py
+      - ./start_receiver.py:/app/start_receiver.py
+      - ./start_api.py:/app/start_api.py
+
+      # Prevent Python bytecode caching issues
+      # (Python will still cache, but in memory only)
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1  # Don't write .pyc files
+      - PYTHONUNBUFFERED=1          # Force unbuffered output for better logging
+
+  newsletter_api:
+    volumes:
+      - ./config_dir:/app/config_dir
+      - ./logs:/app/logs
+
+      # ===== DEVELOPMENT: Mount source code =====
+      - ./app:/app/app
+      - ./llmkira:/app/llmkira
+      - ./start_api.py:/app/start_api.py
+
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1

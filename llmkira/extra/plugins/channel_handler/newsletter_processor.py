@@ -7,6 +7,7 @@ Automatically summarizes content and provides action items
 import os
 from typing import List, Tuple
 from loguru import logger
+from pydantic import ConfigDict
 
 from llmkira.openapi.hook import Hook, resign_hook, Trigger
 from llmkira.task.schema import Location, EventMessage
@@ -16,12 +17,14 @@ from llmkira.task.schema import Location, EventMessage
 class NewsletterProcessorHook(Hook):
     """Hook to process newsletter channel messages"""
 
+    model_config = ConfigDict(extra="forbid", protected_namespaces=())
+
     trigger: Trigger = Trigger.RECEIVER
-    priority = 1  # High priority to run first
+    priority: int = 1  # High priority to run first
 
     async def trigger_hook(self, *args, **kwargs) -> bool:
         """Check if this hook should run"""
-        platform = kwargs.get("platform_name", "")
+        platform = kwargs.get("platform", "")
         locate = kwargs.get("locate")
 
         if platform != "discord_hikari" or not locate:
@@ -29,25 +32,38 @@ class NewsletterProcessorHook(Hook):
 
         # Check if this is the newsletter channel
         newsletter_channel = os.getenv("PLUGIN_NEWS_CHANNEL_ID")
-        return locate.chat_id == newsletter_channel
+
+        # Debug logging
+        logger.debug(f"Newsletter hook: chat_id={locate.chat_id} (type={type(locate.chat_id)}), newsletter_channel={newsletter_channel} (type={type(newsletter_channel)})")
+
+        # Convert to string for comparison
+        is_newsletter = str(locate.chat_id) == newsletter_channel
+
+        if is_newsletter:
+            logger.info(f"📰 Newsletter processor activated for channel {newsletter_channel}")
+
+        return is_newsletter
 
     async def hook_run(
         self,
-        platform_name: str,
-        messages: List[EventMessage],
-        locate: Location = None,
+        *args,
         **kwargs
     ) -> Tuple[Tuple, dict]:
         """Process newsletter messages with summarization and translation"""
 
+        # Extract arguments from kwargs
+        platform = kwargs.get("platform", "")
+        messages = kwargs.get("messages", [])
+        locate = kwargs.get("locate")
+
         if not locate or not messages:
-            return (platform_name, messages, locate), kwargs
+            return (platform, messages, locate), kwargs
 
         newsletter_channel = os.getenv("PLUGIN_NEWS_CHANNEL_ID")
         translate_to_zh = os.getenv("PLUGIN_NEWS_TRANSLATE_TO_ZH_TW", "true").lower() == "true"
 
-        if locate.chat_id != newsletter_channel:
-            return (platform_name, messages, locate), kwargs
+        if str(locate.chat_id) != newsletter_channel:
+            return (platform, messages, locate), kwargs
 
         # Build enhanced system prompt for newsletter processing
         system_prompt = """You are a newsletter content analyzer. Your task is to:
@@ -58,6 +74,8 @@ class NewsletterProcessorHook(Hook):
    - If the content is in English, provide your summary and action items in Traditional Chinese (繁體中文)
    - If the content is already in Chinese, maintain the same language
 
+Important: Only extract information from the original content. Do not add or invent content that wasn't in the original.
+
 Format your response as follows:
 
 📋 **摘要 (Summary)**
@@ -65,31 +83,16 @@ Format your response as follows:
 
 ✅ **行動項目 (Action Items)**
 [List specific actionable steps in bullet format. If none, state "無明確行動項目"]
-
----
-*Note: If original content is in English, the summary above is translated to Traditional Chinese. Original language detected: [EN/ZH]*
 """
 
         # Update kwargs with newsletter-specific settings
         kwargs["system_prompt"] = system_prompt
         kwargs["temperature"] = 0.3  # Lower temperature for more consistent summaries
-        kwargs["max_tokens"] = 1000  # Allow longer responses for summaries
+        kwargs["max_tokens"] = 2000  # Balanced summaries
         kwargs["functions_enabled"] = False  # Disable function calling for summaries
+        kwargs["memory_able"] = False  # Don't save newsletter summaries to conversation history
 
-        # Prefix the message to trigger summarization
-        for message in messages:
-            original_text = message.text
-            message.text = f"""Please analyze and summarize the following newsletter content:
-
----
-{original_text}
----
-
-Provide:
-1. A concise summary (3-5 key points)
-2. Actionable steps extracted from the content
-3. If the content is in English, translate your summary and action items to Traditional Chinese"""
-
+        # No need to modify message text - system_prompt handles instructions
         logger.info(f"📰 Newsletter processor activated for channel {newsletter_channel}")
 
-        return (platform_name, messages, locate), kwargs
+        return (platform, messages, locate), kwargs

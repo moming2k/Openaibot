@@ -20,7 +20,12 @@
       "Bash(docker port:*)",
       "Bash(pkill:*)",
       "Bash(git checkout:*)",
-      "Bash(pm2 status:*)"
+      "Bash(pm2 status:*)",
+      "Bash(docker build:*)",
+      "Bash(docker start:*)",
+      "Bash(git merge:*)",
+      "Bash(python3:*)",
+      "Bash(md5:*)"
     ],
     "deny": [],
     "ask": []

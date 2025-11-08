@@ -4,6 +4,7 @@
 # @File    : __init__.py.py
 # @Software: PyCharm
 import atexit
+import re
 from typing import List
 
 import hikari
@@ -27,6 +28,53 @@ from llmkira.task.schema import Location, EventMessage
 discord_rest: hikari.RESTApp = hikari.RESTApp(
     proxy_settings=ProxySettings(url=BotSetting.proxy_address)
 )
+
+
+def chunk_message(text: str, max_length: int = 1900) -> List[str]:
+    """
+    Split message into chunks that fit Discord's character limit.
+    Uses 1900 to leave room for formatting.
+
+    :param text: The text to split
+    :param max_length: Maximum characters per chunk
+    :return: List of text chunks
+    """
+    if len(text) <= max_length:
+        return [text]
+
+    chunks = []
+    current_chunk = ""
+
+    # Split by paragraphs first
+    paragraphs = text.split('\n\n')
+
+    for para in paragraphs:
+        # If adding this paragraph exceeds the limit
+        if len(current_chunk) + len(para) + 2 > max_length:
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+                current_chunk = ""
+
+            # If paragraph itself is too long, split by sentences
+            if len(para) > max_length:
+                sentences = re.split(r'(?<=[.!?])\s+', para)
+                for sentence in sentences:
+                    if len(current_chunk) + len(sentence) + 1 > max_length:
+                        if current_chunk:
+                            chunks.append(current_chunk.strip())
+                        current_chunk = sentence + " "
+                    else:
+                        current_chunk += sentence + " "
+            else:
+                current_chunk = para + "\n\n"
+        else:
+            current_chunk += para + "\n\n"
+
+    # Add the last chunk
+    if current_chunk.strip():
+        chunks.append(current_chunk.strip())
+
+    return chunks
 
 
 class DiscordSender(BaseSender):
@@ -132,22 +180,47 @@ class DiscordSender(BaseSender):
             if not event.text:
                 continue
 
+            # Split message into chunks if longer than 1900 characters
+            text_chunks = chunk_message(event.text, max_length=1900)
+
             # If bot_message_id exists, update the first text message instead of creating new
             if receiver.bot_message_id and first_text_message:
                 try:
+                    # Update the quick reply with first chunk
                     await self.update_reply(
                         receiver=receiver,
                         message_id=receiver.bot_message_id,
-                        text=event.text
+                        text=text_chunks[0]
                     )
                     first_text_message = False
-                    logger.debug(f"Updated quick reply --bot_message_id {receiver.bot_message_id}")
+                    logger.debug(f"Updated quick reply --bot_message_id {receiver.bot_message_id} --chunks {len(text_chunks)}")
+
+                    # If there are more chunks, send them as new messages
+                    if len(text_chunks) > 1:
+                        async with self.bot as client:
+                            client: hikari.impl.RESTClientImpl
+                            _reply = None
+                            if receiver.thread_id and receiver.thread_id != receiver.chat_id:
+                                _reply = await client.fetch_message(
+                                    channel=channel_id,
+                                    message=int(receiver.message_id) if receiver.message_id else None,
+                                )
+
+                            for chunk in text_chunks[1:]:
+                                await client.create_message(
+                                    channel=channel_id,
+                                    content=chunk,
+                                    reply=_reply,
+                                )
+                                logger.debug(f"Sent continuation chunk ({len(chunk)} chars)")
                     continue
                 except Exception as e:
                     logger.warning(f"Failed to update message --error {e}, falling back to create")
                     receiver.bot_message_id = None
 
             first_text_message = False
+
+            # Send all chunks as new messages
             async with self.bot as client:
                 client: hikari.impl.RESTClientImpl
                 _reply = None
@@ -158,11 +231,15 @@ class DiscordSender(BaseSender):
                         if receiver.message_id
                         else None,
                     )
-                await client.create_message(
-                    channel=channel_id,
-                    content=event.text,
-                    reply=_reply,
-                )
+
+                for idx, chunk in enumerate(text_chunks):
+                    await client.create_message(
+                        channel=channel_id,
+                        content=chunk,
+                        reply=_reply,
+                    )
+                    if len(text_chunks) > 1:
+                        logger.debug(f"Sent chunk {idx + 1}/{len(text_chunks)} ({len(chunk)} chars)")
         return logger.trace("reply message")
 
     async def error(self, receiver: Location, text):

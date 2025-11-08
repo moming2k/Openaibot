@@ -271,6 +271,127 @@ class DeepResearchTool(BaseTool):
 
 
 @resign_hook()
+class DeepResearchPromptHook(Hook):
+    """
+    Hook to add deep research system prompt BEFORE LLM processing.
+    This ensures the LLM responds in deep research format instead of newsletter format.
+    """
+
+    trigger: Trigger = Trigger.RECEIVER
+    priority: int = 5  # Run AFTER ChannelProcessingHook to override channel config
+
+    async def trigger_hook(self, *args, **kwargs) -> bool:
+        """Check if this hook should run"""
+        locate = kwargs.get("locate")
+
+        logger.debug(f"🔬 DeepResearchPromptHook trigger_hook called with locate={locate}")
+
+        if not locate:
+            logger.debug(f"🔬 DeepResearchPromptHook: No locate object")
+            return False
+
+        # Check platform from locate object
+        if not hasattr(locate, 'platform') or locate.platform != "discord_hikari":
+            logger.debug(f"🔬 DeepResearchPromptHook: platform check failed - platform={getattr(locate, 'platform', None)}")
+            return False
+
+        # Check if this is the deep research channel
+        research_channel_id = os.getenv("PLUGIN_DEEP_RESEARCH_CHANNEL_ID")
+        if not research_channel_id:
+            logger.warning(f"🔬 DeepResearchPromptHook: PLUGIN_DEEP_RESEARCH_CHANNEL_ID not set!")
+            return False
+
+        logger.debug(f"🔬 DeepResearchPromptHook: Checking chat_id {locate.chat_id} against research channel {research_channel_id}")
+        is_research = str(locate.chat_id) == research_channel_id
+
+        if is_research:
+            logger.info(f"🔬 Deep research prompt hook activated for channel {research_channel_id}")
+        else:
+            logger.debug(f"🔬 DeepResearchPromptHook: Not research channel (chat_id={locate.chat_id} != {research_channel_id})")
+
+        return is_research
+
+    async def hook_run(
+        self,
+        *args,
+        **kwargs
+    ):
+        """Add deep research system prompt"""
+
+        # Extract arguments - framework may pass them differently
+        if len(args) >= 3:
+            platform_name, messages, locate = args[0], args[1], args[2]
+        else:
+            platform_name = kwargs.get("platform_name", "")
+            messages = kwargs.get("messages", [])
+            locate = kwargs.get("locate")
+
+        if not locate or not messages:
+            return (platform_name, messages, locate), kwargs
+
+        # Add deep research system prompt
+        system_prompt = """You are an expert deep research assistant specializing in comprehensive, multi-faceted analysis. Your responses should demonstrate the depth and rigor of academic research while remaining accessible.
+
+RESEARCH METHODOLOGY:
+- Provide thorough, in-depth analysis with substantial detail
+- Draw from multiple perspectives and disciplines when relevant
+- Include specific examples, data points, and concrete evidence
+- Consider historical context, current developments, and future implications
+- Address counterarguments and alternative viewpoints
+- Cite specific facts, studies, or established knowledge when applicable
+
+RESPONSE STRUCTURE:
+
+🔬 **Deep Research Results**
+
+📋 **Executive Summary**
+Provide a concise 1-2 paragraph overview that captures the essence of the research findings and highlights the most significant insights.
+
+🔍 **Key Findings** (3-5 points)
+Present major discoveries with specific details, supporting evidence, and clear explanations of significance.
+
+📊 **Detailed Analysis**
+Provide thorough examination including:
+- Multiple dimensions of the topic
+- Historical context and current developments
+- Technical details and mechanisms (when applicable)
+- Real-world applications and case studies
+- Challenges, limitations, and controversies
+
+💡 **Insights & Implications**
+Analyze the broader impact, long-term consequences, practical applications, and strategic implications for stakeholders.
+
+🔗 **Related Topics** (2-4 items)
+Identify connected areas with brief explanations of their relationship and relevance.
+
+✅ **Conclusions**
+Summarize key takeaways, provide balanced perspective, and suggest practical next steps.
+
+QUALITY REQUIREMENTS:
+- Provide comprehensive yet concise analysis (approximately 1000-1500 words)
+- Use specific terminology accurately
+- Provide nuanced, balanced perspectives
+- Avoid superficial generalizations
+- Include concrete examples and evidence
+- Maintain academic rigor while being readable
+- Prioritize depth and quality over length"""
+
+        kwargs["system_prompt"] = system_prompt
+        kwargs["temperature"] = 0.7  # Will be auto-removed for gpt-5 models
+        kwargs["max_tokens"] = 2000  # Comprehensive response length
+        kwargs["functions_enabled"] = True
+        kwargs["memory_able"] = False  # Don't save deep research to conversation history
+
+        # Override model to use GPT-5 mini for deep research
+        kwargs["model"] = "gpt-5-mini-2025-08-07"
+
+        logger.warning(f"🔬 DEEP RESEARCH: Setting model to {kwargs['model']}, max_tokens={kwargs.get('max_tokens')}, kwargs keys: {list(kwargs.keys())}")
+        logger.info(f"🔬 Deep research system prompt added (enhanced version with gpt-5)")
+
+        return (platform_name, messages, locate), kwargs
+
+
+@resign_hook()
 class DeepResearchChannelHook(Hook):
     """
     Hook for processing messages in deep research channel.
@@ -278,7 +399,7 @@ class DeepResearchChannelHook(Hook):
     """
 
     trigger: Trigger = Trigger.SENDER
-    priority = 2
+    priority: int = 2
 
     async def trigger_hook(self, *args, **kwargs) -> bool:
         """Check if this hook should run"""
@@ -380,18 +501,7 @@ class DeepResearchChannelHook(Hook):
 __plugin_meta__ = PluginMetadata(
     name=__plugin_name__,
     description="Perform deep research on topics and post results in threaded messages",
-    usage=(
-        "Request deep research on any topic. The bot will:\n"
-        "1. Analyze the topic comprehensively\n"
-        "2. Generate detailed research with multiple sections\n"
-        "3. Automatically split long responses into chunks\n"
-        "4. Post all chunks sequentially in a thread\n\n"
-        "Examples:\n"
-        "• 'Research the impact of AI on healthcare'\n"
-        "• 'Deep research on quantum computing applications'\n"
-        "• 'Analyze the effects of climate change on biodiversity'\n\n"
-        "Configure with: PLUGIN_DEEP_RESEARCH_CHANNEL_ID=your_channel_id"
-    ),
+    usage="Deep research on topics with auto-chunked threaded responses. Set PLUGIN_DEEP_RESEARCH_CHANNEL_ID in .env",
     openapi_version=__openapi_version__,
     function={FuncPair(function=class_tool(DeepResearch), tool=DeepResearchTool)},
     homepage="https://github.com/LlmKira/Openaibot",

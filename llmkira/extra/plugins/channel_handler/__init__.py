@@ -198,6 +198,7 @@ class ChannelManager:
                         functions_enabled=False,  # Disable for summaries
                         web_search_enabled=False,
                         summarization_enabled=True,
+                        max_tokens=400,
                         auto_respond=auto_respond,  # Auto-respond to all messages
                         require_mention=False,  # Don't require mentions
                         keywords=[],  # Respond to all messages, not just keywords
@@ -258,14 +259,10 @@ class ChannelManager:
                         code_interpreter_enabled=False,
                         auto_respond=True,
                         require_mention=False,
-                        max_tokens=2000,
+                        model_override="gpt-5",  # Use GPT-5 for deep research
+                        max_tokens=40000,
                         temperature=0.7,
-                        system_prompt=(
-                            "You are a research assistant specializing in comprehensive, in-depth analysis. "
-                            "Provide structured research with: Executive Summary, Key Findings, Detailed Analysis, "
-                            "Insights & Implications, Related Topics, and Conclusions. "
-                            "Be thorough, well-researched, and include specific details and examples."
-                        )
+                        system_prompt=None,  # Use DeepResearchPromptHook's detailed prompt instead
                     )
                 )
 
@@ -316,71 +313,90 @@ channel_manager = ChannelManager()
 )
 async def channel_trigger(
     message: str,
-    chat_id: str,
-    user_id: str,
-    platform: str = "discord_hikari",
+    uid: str,
     **kwargs
 ) -> bool:
-    """Determine if bot should respond based on channel configuration"""
+    """
+    Determine if bot should respond to messages.
 
-    # Get channel configuration
-    config = channel_manager.get_channel_config(chat_id)
+    Note: The trigger framework only provides message and uid, not chat_id.
+    This limits channel-specific logic. For now, we allow all messages through
+    and let hooks handle channel-specific behavior.
+    """
 
-    if not config or not config.active:
-        # No configuration or inactive - use default behavior
-        return False
-
-    behavior = config.behavior
-
-    # Check blocked keywords first
+    # Since we can't access chat_id from the trigger framework,
+    # we'll use simple keyword-based logic instead
     message_lower = message.lower()
-    if behavior.blocked_keywords:
-        for keyword in behavior.blocked_keywords:
-            if keyword.lower() in message_lower:
-                logger.debug(f"Message blocked by keyword '{keyword}' in channel {chat_id}")
-                return False
 
-    # Check if mention is required
-    if behavior.require_mention:
-        # Check for bot mention (simplified check)
-        if "@" not in message:
+    # Block spam/abuse keywords globally
+    blocked_keywords = ["spam", "abuse", "nsfw"]
+    for keyword in blocked_keywords:
+        if keyword in message_lower:
+            logger.debug(f"Message blocked by global keyword '{keyword}'")
             return False
 
-    # Check for trigger keywords
-    if behavior.keywords:
-        for keyword in behavior.keywords:
-            if keyword.lower() in message_lower:
-                logger.debug(f"Message triggered by keyword '{keyword}' in channel {chat_id}")
-                return True
+    # Allow all other messages through - channel-specific logic handled by hooks
+    return True
 
-    # Check auto-respond
-    if behavior.auto_respond:
-        return True
-
-    # Default behavior based on channel type
-    if config.channel_type == ChannelType.NEWS:
-        # News channels: respond to questions and news requests
-        return any(
-            term in message_lower
-            for term in ["?", "news", "update", "summary", "what", "how", "why"]
-        )
-    elif config.channel_type == ChannelType.TECH:
-        # Tech channels: respond to technical questions
-        return any(
-            term in message_lower
-            for term in ["?", "error", "bug", "help", "code", "debug", "how to"]
-        )
-    elif config.channel_type == ChannelType.SUPPORT:
-        # Support channels: always respond
-        return True
-    elif config.channel_type == ChannelType.DEEP_RESEARCH:
-        # Deep research channels: respond to research requests
-        return any(
-            term in message_lower
-            for term in ["research", "analyze", "study", "investigate", "explore", "?"]
-        )
-
-    return False
+    # ORIGINAL LOGIC COMMENTED OUT - Cannot work without chat_id from framework
+    # Get channel configuration
+    # config = channel_manager.get_channel_config(chat_id)
+    #
+    # if not config or not config.active:
+    #     # No configuration or inactive - use default behavior
+    #     return False
+    #
+    # behavior = config.behavior
+    #
+    # # Check blocked keywords first
+    # message_lower = message.lower()
+    # if behavior.blocked_keywords:
+    #     for keyword in behavior.blocked_keywords:
+    #         if keyword.lower() in message_lower:
+    #             logger.debug(f"Message blocked by keyword '{keyword}' in channel {chat_id}")
+    #             return False
+    #
+    # # Check if mention is required
+    # if behavior.require_mention:
+    #     # Check for bot mention (simplified check)
+    #     if "@" not in message:
+    #         return False
+    #
+    # # Check for trigger keywords
+    # if behavior.keywords:
+    #     for keyword in behavior.keywords:
+    #         if keyword.lower() in message_lower:
+    #             logger.debug(f"Message triggered by keyword '{keyword}' in channel {chat_id}")
+    #             return True
+    #
+    # # Check auto-respond
+    # if behavior.auto_respond:
+    #     return True
+    #
+    # # Default behavior based on channel type
+    # if config.channel_type == ChannelType.NEWS:
+    #     # News channels: respond to questions and news requests
+    #     return any(
+    #         term in message_lower
+    #         for term in ["?", "news", "update", "summary", "what", "how", "why"]
+    #     )
+    # elif config.channel_type == ChannelType.TECH:
+    #     # Tech channels: respond to technical questions
+    #     return any(
+    #         term in message_lower
+    #         for term in ["?", "error", "bug", "help", "code", "debug", "how to"]
+    #     )
+    # elif config.channel_type == ChannelType.SUPPORT:
+    #     # Support channels: always respond
+    #     return True
+    # elif config.channel_type == ChannelType.DEEP_RESEARCH:
+    #     # Deep research channels: respond to research requests
+    #     return any(
+    #         term in message_lower
+    #         for term in ["research", "analyze", "study", "investigate", "explore", "?"]
+    #     )
+    #
+    # return False
 
 
 # Channel-specific message processing hook
@@ -389,7 +405,7 @@ class ChannelProcessingHook(Hook):
     """Hook to process messages based on channel configuration"""
 
     trigger: Trigger = Trigger.RECEIVER
-    priority = 5
+    priority: int = 0  # Run FIRST to set base channel config
 
     async def trigger_hook(self, *args, **kwargs) -> bool:
         """Check if this hook should run"""
@@ -520,6 +536,7 @@ async def configure_channel_behavior(
         prefix=prefix,
         functions_enabled=functions_enabled,
         auto_respond=auto_respond,
+        max_tokens=400,
         keywords=keywords or []
     )
 
