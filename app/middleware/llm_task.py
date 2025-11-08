@@ -27,6 +27,7 @@ from llmkira.openai.cell import (
 from llmkira.openai.request import OpenAIResult, OpenAI, OpenAICredential
 from llmkira.task import TaskHeader
 from llmkira.task.schema import EventMessage
+from llmkira.kv_manager.history import history_manager, HistoryEntry
 
 
 def unique_function(tools: List[Tool]):
@@ -139,6 +140,59 @@ class OpenaiMiddleware(object):
         """
         if message:
             await self.message_history.append(messages=[message])
+
+    async def _track_history(self, messages: List[Message], result: OpenAIResult, credential: Credential):
+        """
+        Track request/response history for Web UI display
+        """
+        try:
+            # Only track if history tracking is enabled
+            if not os.getenv("HISTORY_TRACKING_ENABLED", "true").lower() in ["true", "1", "yes"]:
+                return
+
+            # Extract user request (last user message)
+            user_request = ""
+            for msg in reversed(messages):
+                if isinstance(msg, UserMessage):
+                    # Handle both string and list content
+                    if isinstance(msg.content, str):
+                        user_request = msg.content
+                    elif isinstance(msg.content, list):
+                        # Extract text from content parts
+                        text_parts = [part.text for part in msg.content if hasattr(part, 'text')]
+                        user_request = "\n".join(text_parts)
+                    break
+
+            # Extract assistant response
+            assistant_response = ""
+            if result.default_message and result.default_message.content:
+                assistant_response = result.default_message.content
+
+            # Extract tool calls if any
+            tool_calls_list = []
+            if result.default_message and result.default_message.tool_calls:
+                tool_calls_list = [tc.function.name for tc in result.default_message.tool_calls]
+
+            # Create history entry
+            entry = HistoryEntry(
+                task_id=self.task.task_sign.task_uuid,
+                platform=self.task.receiver.platform,
+                user_id=self.task.receiver.user_id,
+                chat_id=self.task.receiver.chat_id,
+                request=user_request[:10000],  # Limit length
+                response=assistant_response[:10000],  # Limit length
+                model=credential.api_model,
+                tool_calls=tool_calls_list,
+                token_usage=result.usage.total_tokens if result.usage else None
+            )
+
+            # Save to history
+            await history_manager.save_entry(entry)
+            logger.debug(f"History tracked --task_id {entry.task_id}")
+
+        except Exception as e:
+            # Don't fail the main flow if history tracking fails
+            logger.warning(f"Failed to track history --error {e}")
 
     async def build_history_messages(self):
         """
@@ -287,4 +341,8 @@ class OpenaiMiddleware(object):
         )
         # 写回数据库
         await self.remember(message=_message)
+
+        # Track request/response for Web UI history
+        await self._track_history(messages=messages, result=result, credential=credential)
+
         return result

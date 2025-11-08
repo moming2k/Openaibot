@@ -8,9 +8,11 @@ import os
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Header, Depends
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import logging
+from pathlib import Path
 
 # Use standard logging if loguru not available
 try:
@@ -25,6 +27,7 @@ except ImportError:
 
 from llmkira.task import Task, TaskHeader
 from llmkira.task.schema import EventMessage, Sign, Location
+from llmkira.kv_manager.history import history_manager, HistoryEntry
 
 
 app = FastAPI(
@@ -32,6 +35,11 @@ app = FastAPI(
     description="Submit content for newsletter processing and summarization",
     version="1.0.0"
 )
+
+# Mount static files directory
+static_dir = Path(__file__).parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 
 class NewsletterSubmission(BaseModel):
@@ -53,6 +61,22 @@ class NewsletterResponse(BaseModel):
     success: bool
     message: str
     task_id: Optional[str] = None
+
+
+class HistoryListResponse(BaseModel):
+    """Response model for history list"""
+    success: bool
+    total: int
+    entries: list
+    offset: int
+    limit: int
+
+
+class HistoryDetailResponse(BaseModel):
+    """Response model for history detail"""
+    success: bool
+    entry: Optional[dict] = None
+    message: Optional[str] = None
 
 
 def verify_api_key(x_api_key: str = Header(...)):
@@ -78,7 +102,10 @@ async def root():
         "service": "LLMKira Newsletter API",
         "version": "1.0.0",
         "endpoints": {
-            "POST /newsletter/submit": "Submit content for newsletter processing"
+            "POST /newsletter/submit": "Submit content for newsletter processing",
+            "GET /history": "Get conversation history (requires API key)",
+            "GET /history/{task_id}": "Get specific conversation detail (requires API key)",
+            "GET /history/ui": "Web UI for viewing history"
         }
     }
 
@@ -87,6 +114,26 @@ async def root():
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
+
+
+@app.get("/history/ui", response_class=HTMLResponse)
+async def history_ui():
+    """
+    Web UI for viewing conversation history
+
+    Opens an interactive dashboard to browse and search through conversation history.
+    No authentication required to view the UI, but API key is needed to fetch data.
+    """
+    static_dir = Path(__file__).parent / "static"
+    html_file = static_dir / "history.html"
+
+    if html_file.exists():
+        return FileResponse(html_file)
+    else:
+        raise HTTPException(
+            status_code=404,
+            detail="History UI not found. Please ensure static files are properly installed."
+        )
 
 
 @app.post("/newsletter/submit", response_model=NewsletterResponse)
@@ -186,6 +233,109 @@ async def submit_newsletter_content(
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
+        )
+
+
+@app.get("/history", response_model=HistoryListResponse)
+async def get_history(
+    platform: Optional[str] = None,
+    user_id: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Get conversation history
+
+    Query parameters:
+    - platform: Filter by platform (telegram, discord, etc.)
+    - user_id: Filter by user ID (requires platform)
+    - limit: Maximum number of entries (default: 50, max: 100)
+    - offset: Number of entries to skip (default: 0)
+
+    **Authentication**: Requires X-API-Key header
+
+    **Example**:
+    ```bash
+    curl -X GET "http://localhost:8765/history?limit=10" \\
+         -H "X-API-Key: your-api-key-here"
+    ```
+    """
+    try:
+        # Validate limit
+        if limit > 100:
+            limit = 100
+        if limit < 1:
+            limit = 1
+
+        # Fetch history
+        if user_id and platform:
+            entries = await history_manager.get_user_history(
+                platform=platform,
+                user_id=user_id,
+                limit=limit,
+                offset=offset
+            )
+        else:
+            entries = await history_manager.get_global_history(
+                limit=limit,
+                offset=offset
+            )
+
+        # Convert to dict for JSON response
+        entries_dict = [entry.to_dict() for entry in entries]
+
+        return HistoryListResponse(
+            success=True,
+            total=len(entries_dict),
+            entries=entries_dict,
+            offset=offset,
+            limit=limit
+        )
+
+    except Exception as e:
+        logger.exception(f"Error fetching history: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch history: {str(e)}"
+        )
+
+
+@app.get("/history/{task_id}", response_model=HistoryDetailResponse)
+async def get_history_detail(
+    task_id: str,
+    api_key: str = Depends(verify_api_key)
+):
+    """
+    Get specific conversation detail by task ID
+
+    **Authentication**: Requires X-API-Key header
+
+    **Example**:
+    ```bash
+    curl -X GET "http://localhost:8765/history/ABCD1" \\
+         -H "X-API-Key: your-api-key-here"
+    ```
+    """
+    try:
+        entry = await history_manager.get_entry(task_id)
+
+        if entry:
+            return HistoryDetailResponse(
+                success=True,
+                entry=entry.to_dict()
+            )
+        else:
+            return HistoryDetailResponse(
+                success=False,
+                message="History entry not found"
+            )
+
+    except Exception as e:
+        logger.exception(f"Error fetching history detail: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch history detail: {str(e)}"
         )
 
 

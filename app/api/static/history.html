@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLMKira - Conversation History</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+        }
+
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .control-group label {
+            font-size: 14px;
+            color: #555;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        .control-group input,
+        .control-group select {
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        .control-group input:focus,
+        .control-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .history-list {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .history-item {
+            border-bottom: 1px solid #e0e0e0;
+            padding: 20px 0;
+            transition: background 0.2s;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-item:hover {
+            background: #f8f9fa;
+            cursor: pointer;
+        }
+
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .task-info {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .badge-platform {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .badge-user {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+
+        .badge-model {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .timestamp {
+            color: #999;
+            font-size: 12px;
+        }
+
+        .request-preview {
+            background: #f5f5f5;
+            padding: 12px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 14px;
+            color: #333;
+            max-height: 60px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .request-preview.expanded {
+            max-height: none;
+        }
+
+        .response-preview {
+            background: #e3f2fd;
+            padding: 12px;
+            border-radius: 5px;
+            font-size: 14px;
+            color: #1565c0;
+            max-height: 60px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .response-preview.expanded {
+            max-height: none;
+        }
+
+        .preview-label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .metadata {
+            display: flex;
+            gap: 15px;
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+
+        .empty {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .tool-calls {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+
+        .tool-badge {
+            background: #fff3e0;
+            color: #e65100;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 LLMKira Conversation History</h1>
+            <p>Track and review all your AI conversations</p>
+        </div>
+
+        <div class="controls">
+            <div class="controls-grid">
+                <div class="control-group">
+                    <label for="apiKey">API Key</label>
+                    <input type="password" id="apiKey" placeholder="Enter your API key">
+                </div>
+                <div class="control-group">
+                    <label for="platform">Platform</label>
+                    <select id="platform">
+                        <option value="">All Platforms</option>
+                        <option value="telegram">Telegram</option>
+                        <option value="discord_hikari">Discord</option>
+                        <option value="kook">Kook</option>
+                        <option value="slack">Slack</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="userId">User ID</label>
+                    <input type="text" id="userId" placeholder="Optional">
+                </div>
+                <div class="control-group">
+                    <label for="limit">Items per page</label>
+                    <input type="number" id="limit" value="20" min="1" max="100">
+                </div>
+            </div>
+            <button class="btn" onclick="loadHistory()">Load History</button>
+        </div>
+
+        <div id="historyContainer">
+            <div class="loading">
+                Enter your API key and click "Load History" to view conversations
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentOffset = 0;
+        let currentLimit = 20;
+
+        function formatTimestamp(timestamp) {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString();
+        }
+
+        function truncateText(text, maxLength = 200) {
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+
+        async function loadHistory() {
+            const apiKey = document.getElementById('apiKey').value;
+            if (!apiKey) {
+                showError('Please enter your API key');
+                return;
+            }
+
+            const platform = document.getElementById('platform').value;
+            const userId = document.getElementById('userId').value;
+            const limit = parseInt(document.getElementById('limit').value);
+            currentLimit = limit;
+
+            // Build URL with query parameters
+            let url = `/history?limit=${limit}&offset=${currentOffset}`;
+            if (platform) url += `&platform=${platform}`;
+            if (userId && platform) url += `&user_id=${userId}`;
+
+            const container = document.getElementById('historyContainer');
+            container.innerHTML = '<div class="loading">Loading...</div>';
+
+            try {
+                const response = await fetch(url, {
+                    headers: {
+                        'X-API-Key': apiKey
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                if (data.success && data.entries.length > 0) {
+                    displayHistory(data.entries);
+                } else {
+                    container.innerHTML = '<div class="empty">No conversation history found</div>';
+                }
+            } catch (error) {
+                showError(`Failed to load history: ${error.message}`);
+            }
+        }
+
+        function displayHistory(entries) {
+            const container = document.getElementById('historyContainer');
+            const historyList = document.createElement('div');
+            historyList.className = 'history-list';
+
+            entries.forEach(entry => {
+                const item = document.createElement('div');
+                item.className = 'history-item';
+                item.onclick = () => toggleExpand(item);
+
+                const toolCallsHtml = entry.tool_calls && entry.tool_calls.length > 0
+                    ? `<div class="tool-calls">${entry.tool_calls.map(tc =>
+                        `<span class="tool-badge">🔧 ${tc}</span>`
+                      ).join('')}</div>`
+                    : '';
+
+                item.innerHTML = `
+                    <div class="history-header">
+                        <div class="task-info">
+                            <span class="badge badge-platform">${entry.platform}</span>
+                            <span class="badge badge-user">User: ${entry.user_id}</span>
+                            ${entry.model ? `<span class="badge badge-model">${entry.model}</span>` : ''}
+                            <span class="timestamp">${formatTimestamp(entry.timestamp)}</span>
+                        </div>
+                    </div>
+                    <div class="request-preview">
+                        <div class="preview-label">Request</div>
+                        <pre>${entry.request || 'No request text'}</pre>
+                    </div>
+                    <div class="response-preview">
+                        <div class="preview-label">Response</div>
+                        <pre>${entry.response || 'No response text'}</pre>
+                    </div>
+                    ${toolCallsHtml}
+                    <div class="metadata">
+                        <span>Task ID: ${entry.task_id}</span>
+                        ${entry.token_usage ? `<span>Tokens: ${entry.token_usage}</span>` : ''}
+                        <span>Chat: ${entry.chat_id}</span>
+                    </div>
+                `;
+
+                historyList.appendChild(item);
+            });
+
+            // Add pagination
+            const pagination = document.createElement('div');
+            pagination.className = 'pagination';
+
+            if (currentOffset > 0) {
+                const prevBtn = document.createElement('button');
+                prevBtn.className = 'btn';
+                prevBtn.textContent = 'Previous';
+                prevBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    currentOffset = Math.max(0, currentOffset - currentLimit);
+                    loadHistory();
+                };
+                pagination.appendChild(prevBtn);
+            }
+
+            if (entries.length === currentLimit) {
+                const nextBtn = document.createElement('button');
+                nextBtn.className = 'btn';
+                nextBtn.textContent = 'Next';
+                nextBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    currentOffset += currentLimit;
+                    loadHistory();
+                };
+                pagination.appendChild(nextBtn);
+            }
+
+            historyList.appendChild(pagination);
+            container.innerHTML = '';
+            container.appendChild(historyList);
+        }
+
+        function toggleExpand(item) {
+            const request = item.querySelector('.request-preview');
+            const response = item.querySelector('.response-preview');
+            request.classList.toggle('expanded');
+            response.classList.toggle('expanded');
+        }
+
+        function showError(message) {
+            const container = document.getElementById('historyContainer');
+            container.innerHTML = `<div class="error">${message}</div>`;
+        }
+
+        // Load API key from localStorage if available
+        window.addEventListener('load', () => {
+            const savedApiKey = localStorage.getItem('llmkira_api_key');
+            if (savedApiKey) {
+                document.getElementById('apiKey').value = savedApiKey;
+            }
+        });
+
+        // Save API key to localStorage when it changes
+        document.getElementById('apiKey').addEventListener('change', (e) => {
+            localStorage.setItem('llmkira_api_key', e.target.value);
+        });
+    </script>
+</body>
+</html>

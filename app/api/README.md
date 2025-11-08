@@ -9,6 +9,7 @@ HTTP API server for submitting long-form content to the newsletter channel. Usef
 - Extract actionable items
 - API key authentication
 - Swagger UI documentation
+- **NEW**: Conversation history tracking with Web UI ([Documentation](./HISTORY_TRACKING.md))
 
 ## Quick Start
 
@@ -52,12 +53,25 @@ Once running, visit:
 - **Swagger UI**: http://localhost:8765/docs
 - **ReDoc**: http://localhost:8765/redoc
 - **Health Check**: http://localhost:8765/health
+- **History UI**: http://localhost:8765/history/ui (view conversation history)
 
 ## API Endpoints
 
 ### POST /newsletter/submit
 
 Submit content for newsletter processing.
+
+### GET /history
+
+Get conversation history with filtering options. See [HISTORY_TRACKING.md](./HISTORY_TRACKING.md) for details.
+
+### GET /history/{task_id}
+
+Get specific conversation details by task ID.
+
+### GET /history/ui
+
+Interactive Web UI for browsing conversation history.
 
 **Headers:**
 - `X-API-Key`: Your API key (from `NEWSLETTER_API_KEY` environment variable)
@@ -148,6 +162,7 @@ axios.post(url, data, { headers })
 | `NEWSLETTER_API_HOST` | `0.0.0.0` | Host to bind to |
 | `NEWSLETTER_API_KEY` | - | API key for authentication (required) |
 | `PLUGIN_NEWS_CHANNEL_ID` | - | Discord channel ID for newsletter |
+| `HISTORY_TRACKING_ENABLED` | `true` | Enable conversation history tracking |
 
 ## Troubleshooting
 
