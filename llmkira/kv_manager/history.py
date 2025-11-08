@@ -80,7 +80,17 @@ class HistoryManager(KvManager):
             # Read existing index
             index_data = await self.read_data(index_key)
             if index_data:
-                index_list = json.loads(index_data)
+                # Handle both string JSON and already-deserialized list
+                if isinstance(index_data, str):
+                    index_list = json.loads(index_data)
+                elif isinstance(index_data, (list, bytes)):
+                    # If bytes, decode first
+                    if isinstance(index_data, bytes):
+                        index_list = json.loads(index_data.decode('utf-8'))
+                    else:
+                        index_list = index_data
+                else:
+                    index_list = []
             else:
                 index_list = []
 
@@ -113,7 +123,16 @@ class HistoryManager(KvManager):
             entry_key = f"entry:{task_id}"
             data = await self.read_data(entry_key)
             if data:
-                return HistoryEntry.from_dict(json.loads(data))
+                # Handle both string JSON and already-deserialized dict
+                if isinstance(data, str):
+                    entry_dict = json.loads(data)
+                elif isinstance(data, bytes):
+                    entry_dict = json.loads(data.decode('utf-8'))
+                elif isinstance(data, dict):
+                    entry_dict = data
+                else:
+                    return None
+                return HistoryEntry.from_dict(entry_dict)
             return None
         except Exception as e:
             from loguru import logger
@@ -142,7 +161,15 @@ class HistoryManager(KvManager):
             if not index_data:
                 return []
 
-            index_list = json.loads(index_data)
+            # Handle both string JSON and already-deserialized list
+            if isinstance(index_data, str):
+                index_list = json.loads(index_data)
+            elif isinstance(index_data, bytes):
+                index_list = json.loads(index_data.decode('utf-8'))
+            elif isinstance(index_data, list):
+                index_list = index_data
+            else:
+                return []
 
             # Apply pagination
             paginated_list = index_list[offset:offset + limit]
@@ -178,7 +205,15 @@ class HistoryManager(KvManager):
             if not index_data:
                 return []
 
-            index_list = json.loads(index_data)
+            # Handle both string JSON and already-deserialized list
+            if isinstance(index_data, str):
+                index_list = json.loads(index_data)
+            elif isinstance(index_data, bytes):
+                index_list = json.loads(index_data.decode('utf-8'))
+            elif isinstance(index_data, list):
+                index_list = index_data
+            else:
+                return []
 
             # Apply pagination
             paginated_list = index_list[offset:offset + limit]
