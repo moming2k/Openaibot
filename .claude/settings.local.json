@@ -25,7 +25,9 @@
       "Bash(docker start:*)",
       "Bash(git merge:*)",
       "Bash(python3:*)",
-      "Bash(md5:*)"
+      "Bash(md5:*)",
+      "Bash(docker run:*)",
+      "Bash(docker inspect:*)"
     ],
     "deny": [],
     "ask": []

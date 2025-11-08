@@ -1,6 +1,6 @@
 from typing import List
 
-from fast_langdetect import detect_multilingual
+from fast_langdetect import detect as detect_multilingual
 from loguru import logger
 
 from llmkira.extra.voice import request_cn, request_en

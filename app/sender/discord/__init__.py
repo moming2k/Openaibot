@@ -15,7 +15,7 @@ from hikari import Intents
 from hikari.impl import ProxySettings
 from loguru import logger
 from telebot import formatting
-from telegramify_markdown import convert as markdownify
+from telegramify_markdown import markdownify
 
 from app.setting.discord import BotSetting
 from llmkira.kv_manager.env import EnvManager
