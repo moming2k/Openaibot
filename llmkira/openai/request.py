@@ -179,21 +179,6 @@ class OpenAI(BaseModel):
                         for content in message.content
                         if content.type != "image_url"
                     ]
-
-        # GPT-5 and o1 models don't support system messages
-        # Convert system messages to user messages for these models
-        if self.model.startswith("gpt-5") or self.model.startswith("o1"):
-            converted_messages = []
-            for message in self.messages:
-                if isinstance(message, SystemMessage):
-                    # Convert system message to user message
-                    user_msg = UserMessage(content=f"[System Instructions]\n{message.content}")
-                    converted_messages.append(user_msg)
-                    logger.debug(f"Converted system message to user message for {self.model}")
-                else:
-                    converted_messages.append(message)
-            self.messages = converted_messages
-
         return self
 
     @retry(
@@ -220,12 +205,6 @@ class OpenAI(BaseModel):
         if "max_tokens" in kwargs and (model.startswith("gpt-5") or model.startswith("o1")):
             kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
             logger.debug(f"Using max_completion_tokens for model {model}")
-
-        # GPT-5 and o1 models don't support temperature parameter
-        if model.startswith("gpt-5") or model.startswith("o1"):
-            if "temperature" in kwargs:
-                kwargs.pop("temperature")
-                logger.debug(f"Removed temperature parameter for model {model}")
 
         try:
             response = await client.post(

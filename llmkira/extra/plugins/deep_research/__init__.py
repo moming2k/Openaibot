@@ -345,47 +345,69 @@ RESPONSE STRUCTURE:
 🔬 **Deep Research Results**
 
 📋 **Executive Summary**
-Provide a concise 1-2 paragraph overview that captures the essence of the research findings and highlights the most significant insights.
+Provide a comprehensive 2-3 paragraph overview that:
+- Captures the essence of the research findings
+- Highlights the most significant insights
+- Sets the context for the detailed analysis
 
-🔍 **Key Findings** (3-5 points)
-Present major discoveries with specific details, supporting evidence, and clear explanations of significance.
+🔍 **Key Findings** (Minimum 5-7 points)
+Present major discoveries with:
+- Specific details and supporting evidence
+- Quantitative data when relevant
+- Clear explanations of significance
+- Connections between findings
 
-📊 **Detailed Analysis**
+📊 **Detailed Analysis** (Substantial depth required)
 Provide thorough examination including:
 - Multiple dimensions of the topic
-- Historical context and current developments
+- Historical development and evolution
+- Current state and recent developments
 - Technical details and mechanisms (when applicable)
+- Comparative analysis with related concepts
 - Real-world applications and case studies
 - Challenges, limitations, and controversies
 
 💡 **Insights & Implications**
-Analyze the broader impact, long-term consequences, practical applications, and strategic implications for stakeholders.
+Explore deeper meaning by analyzing:
+- Broader impact on field/society/industry
+- Long-term consequences and trends
+- Interdisciplinary connections
+- Practical applications and recommendations
+- Ethical considerations (if relevant)
+- Strategic implications for stakeholders
 
-🔗 **Related Topics** (2-4 items)
-Identify connected areas with brief explanations of their relationship and relevance.
+🔗 **Related Topics** (With explanations)
+Identify 4-6 connected areas with:
+- Brief explanation of relationship
+- Relevance to main topic
+- Potential for further exploration
 
 ✅ **Conclusions**
-Summarize key takeaways, provide balanced perspective, and suggest practical next steps.
+Synthesize findings by:
+- Summarizing key takeaways
+- Providing balanced perspective
+- Highlighting areas of uncertainty or ongoing research
+- Suggesting practical next steps or applications
 
 QUALITY REQUIREMENTS:
-- Provide comprehensive yet concise analysis (approximately 1000-1500 words)
+- Minimum 6000-8000 words total for comprehensive coverage
 - Use specific terminology accurately
 - Provide nuanced, balanced perspectives
 - Avoid superficial generalizations
 - Include concrete examples and evidence
 - Maintain academic rigor while being readable
-- Prioritize depth and quality over length"""
+- Go deep - prioritize thoroughness over brevity"""
 
         kwargs["system_prompt"] = system_prompt
-        kwargs["temperature"] = 0.7  # Will be auto-removed for gpt-5 models
-        kwargs["max_tokens"] = 2000  # Comprehensive response length
+        kwargs["temperature"] = 0.7  # Balanced creativity and accuracy
+        kwargs["max_tokens"] = 40000  # Allow for very comprehensive responses
         kwargs["functions_enabled"] = True
         kwargs["memory_able"] = False  # Don't save deep research to conversation history
 
-        # Override model to use GPT-5 mini for deep research
-        kwargs["model"] = "gpt-5-mini-2025-08-07"
+        # Override model to use GPT-5 for deep research
+        kwargs["model"] = "gpt-5"
 
-        logger.warning(f"🔬 DEEP RESEARCH: Setting model to {kwargs['model']}, max_tokens={kwargs.get('max_tokens')}, kwargs keys: {list(kwargs.keys())}")
+        logger.warning(f"🔬 DEEP RESEARCH: Setting model to gpt-5, max_tokens={kwargs.get('max_tokens')}, kwargs keys: {list(kwargs.keys())}")
         logger.info(f"🔬 Deep research system prompt added (enhanced version with gpt-5)")
 
         return (platform_name, messages, locate), kwargs

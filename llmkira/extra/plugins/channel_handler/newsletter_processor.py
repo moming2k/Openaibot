@@ -74,8 +74,6 @@ class NewsletterProcessorHook(Hook):
    - If the content is in English, provide your summary and action items in Traditional Chinese (繁體中文)
    - If the content is already in Chinese, maintain the same language
 
-Important: Only extract information from the original content. Do not add or invent content that wasn't in the original.
-
 Format your response as follows:
 
 📋 **摘要 (Summary)**
@@ -83,6 +81,11 @@ Format your response as follows:
 
 ✅ **行動項目 (Action Items)**
 [List specific actionable steps in bullet format. If none, state "無明確行動項目"]
+
+---
+*Note: 
+Don't make any content that is not in the original content.
+If original content is in English, the summary above is translated to Traditional Chinese. Original language detected: [EN/ZH]*
 """
 
         # Update kwargs with newsletter-specific settings
